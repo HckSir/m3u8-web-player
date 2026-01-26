@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M3U8 Pro - 现代流媒体播放器</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'system-ui', 'sans-serif'],
+                    },
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#60A5FA',
+                        dark: {
+                            950: '#020617',
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <!-- HLS.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.4.12/hls.min.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #020617; /* dark-950 */
+            color: #f8fafc;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569; 
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .video-wrapper {
+            box-shadow: 0 0 40px -10px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-primary selection:text-white">
+
+    <!-- Header -->
+    <header class="border-b border-white/5 bg-dark-900/50 backdrop-blur-md sticky top-0 z-50">
+        <div class="container mx-auto px-4 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <i class="fas fa-play text-white text-xs"></i>
+                </div>
+                <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                    M3U8 Pro
+                </h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <a href="https://github.com" target="_blank" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fab fa-github text-xl"></i>
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 container mx-auto px-4 py-8 max-w-7xl">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- Left Column: Player & Input -->
+            <div class="lg:col-span-8 space-y-6">
+                
+                <!-- Input Section -->
+                <div class="glass-panel p-1 rounded-xl flex gap-2 shadow-lg">
+                    <div class="flex-1 relative">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <i class="fas fa-link text-slate-500"></i>
+                        </div>
+                        <input type="text" id="m3u8Url" 
+                            class="w-full bg-transparent border-none text-white placeholder-slate-500 focus:ring-0 pl-10 py-3 text-sm font-medium"
+                            placeholder="在此粘贴 M3U8 视频链接...">
+                    </div>
+                    <button id="playBtn" class="bg-primary hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold transition-all shadow-lg shadow-blue-500/20 active:scale-95 flex items-center gap-2">
+                        <i class="fas fa-play"></i>
+                        <span>播放</span>
+                    </button>
+                </div>
+
+                <!-- Video Player -->
+                <div class="relative aspect-video bg-black rounded-xl overflow-hidden video-wrapper group ring-1 ring-white/10">
+                    <video id="video" class="w-full h-full object-contain" controls crossorigin="anonymous">
+                        <p class="text-white text-center mt-10">您的浏览器不支持 HTML5 视频播放。</p>
+                    </video>
+                    
+                    <!-- Overlay Message (Hidden by default) -->
+                    <div id="playerMessage" class="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-10 backdrop-blur-sm">
+                        <div class="w-16 h-16 rounded-full bg-slate-800/50 flex items-center justify-center mb-4">
+                            <i class="fas fa-film text-slate-500 text-2xl"></i>
+                        </div>
+                        <p class="text-slate-400 font-medium">请输入链接开始播放</p>
+                    </div>
+
+                    <!-- Loading Spinner (Hidden by default) -->
+                    <div id="loadingSpinner" class="absolute inset-0 flex items-center justify-center bg-black/50 z-20 hidden">
+                        <div class="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
+                    </div>
+                </div>
+
+                <!-- Status & Info -->
+                <div class="flex items-center justify-between text-sm text-slate-400 px-1">
+                    <div class="flex items-center gap-2">
+                        <span id="statusIndicator" class="w-2 h-2 rounded-full bg-slate-600"></span>
+                        <span id="statusText">等待播放</span>
+                    </div>
+                    <div>
+                        <button id="btnFavorite" class="flex items-center gap-2 hover:text-primary transition-colors">
+                            <i class="far fa-star text-lg"></i>
+                            <span>收藏</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Right Column: Playlist & History -->
+            <div class="lg:col-span-4 space-y-6">
+                
+                <!-- Tabs -->
+                <div class="flex p-1 bg-slate-900/50 rounded-lg border border-white/5">
+                    <button class="flex-1 py-2 text-sm font-medium rounded-md bg-slate-800 text-white shadow-sm transition-all" id="tabHistory">
+                        <i class="fas fa-clock mr-2"></i>播放历史
+                    </button>
+                    <button class="flex-1 py-2 text-sm font-medium rounded-md text-slate-400 hover:text-white transition-all" id="tabFavorites">
+                        <i class="fas fa-star mr-2"></i>收藏夹
+                    </button>
+                </div>
+
+                <!-- List Container -->
+                <div class="glass-panel rounded-xl overflow-hidden flex flex-col h-[500px]">
+                    <div class="p-4 border-b border-white/5 flex justify-between items-center">
+                        <h3 class="font-semibold text-slate-200" id="listTitle">最近播放</h3>
+                        <button id="clearListBtn" class="text-xs text-slate-500 hover:text-red-400 transition-colors">
+                            <i class="fas fa-trash-alt mr-1"></i>清空
+                        </button>
+                    </div>
+                    
+                    <div class="flex-1 overflow-y-auto p-2 space-y-1" id="playlistContainer">
+                        <!-- Items will be injected here -->
+                        <div class="text-center py-10 text-slate-600">
+                            <i class="fas fa-inbox text-3xl mb-3 opacity-50"></i>
+                            <p class="text-sm">暂无记录</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="importBtn" class="glass-panel p-3 rounded-xl hover:bg-white/5 transition-colors text-left group">
+                        <div class="text-green-400 mb-1 group-hover:scale-110 transition-transform origin-left">
+                            <i class="fas fa-file-import text-xl"></i>
+                        </div>
+                        <div class="text-sm font-medium text-slate-200">导入列表</div>
+                        <div class="text-xs text-slate-500">从 JSON 恢复</div>
+                    </button>
+                    <input type="file" id="importInput" accept=".json" class="hidden">
+                    <button id="exportBtn" class="glass-panel p-3 rounded-xl hover:bg-white/5 transition-colors text-left group">
+                        <div class="text-purple-400 mb-1 group-hover:scale-110 transition-transform origin-left">
+                            <i class="fas fa-file-export text-xl"></i>
+                        </div>
+                        <div class="text-sm font-medium text-slate-200">导出列表</div>
+                        <div class="text-xs text-slate-500">保存为 JSON</div>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/5 mt-auto py-6 bg-dark-900/30">
+        <div class="container mx-auto px-4 text-center text-slate-500 text-sm">
+            <p>&copy; 2026 M3U8 Pro. Powered by HLS.js & Tailwind.</p>
+        </div>
+    </footer>
+
+    <!-- Add Favorite Modal -->
+    <div id="favModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="glass-panel w-full max-w-md rounded-2xl shadow-2xl transform transition-all scale-100 p-6 space-y-4">
+            <div class="flex justify-between items-center border-b border-white/10 pb-4">
+                <h3 class="text-xl font-bold text-white">添加到收藏</h3>
+                <button id="closeFavModal" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">备注名称</label>
+                    <input type="text" id="favNote" class="w-full bg-slate-900/50 border border-white/10 rounded-lg px-4 py-2.5 text-white placeholder-slate-600 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all" placeholder="给视频起个名字...">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-400 mb-1">视频地址</label>
+                    <div class="bg-slate-900/30 border border-white/5 rounded-lg px-4 py-2.5 text-slate-500 text-sm truncate select-all" id="favUrlDisplay">
+                        https://example.com/video.m3u8
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex gap-3 pt-2">
+                <button id="cancelFavBtn" class="flex-1 px-4 py-2.5 rounded-lg border border-white/10 text-slate-300 hover:bg-white/5 transition-colors font-medium">
+                    取消
+                </button>
+                <button id="confirmFavBtn" class="flex-1 px-4 py-2.5 rounded-lg bg-primary hover:bg-blue-600 text-white shadow-lg shadow-blue-500/20 transition-all font-medium">
+                    保存
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="script.js"></script>
+</body>
+</html>
