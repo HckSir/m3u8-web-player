@@ -203,6 +203,7 @@ function playVideo(url) {
         // 自定义 loader：使用 fetch + no-referrer 策略，绕过服务器 Referer 校验
         function createNoRefererLoader() {
             function CustomLoader(config) {
+                // 完全自定义 loader，不继承默认 XHR loader
                 var loadUrl = null;
                 var aborter = null;
                 
@@ -229,8 +230,7 @@ function playVideo(url) {
                             mode: 'cors',
                             credentials: 'omit',
                             referrerPolicy: 'no-referrer',
-                            signal: aborter.signal,
-                            headers: {}
+                            signal: aborter.signal
                         };
                         
                         fetch(loadUrl, fetchOptions)
@@ -285,7 +285,7 @@ function playVideo(url) {
         
         hls = new Hls({
             debug: false,
-            enableWorker: true,
+            enableWorker: false,
             loader: createNoRefererLoader()
         });
         
