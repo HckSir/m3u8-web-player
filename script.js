@@ -190,7 +190,7 @@ favModal.addEventListener('click', (e) => {
 // Functions
 
 function playVideo(url) {
-    updateFavoriteBtnState(url); // Update button state immediately
+    updateFavoriteBtnState(url);
     
     if (Hls.isSupported()) {
         if (hls) {
@@ -200,9 +200,27 @@ function playVideo(url) {
         showLoading(true);
         updateStatus('loading', '正在加载视频资源...');
         
+        // 自定义 loader：移除 ts 和 key 请求的 Referer 头
+        function createNoRefererLoader() {
+            function CustomLoader(config) {
+                var loader = new Hls.DefaultConfig.loader(config);
+                var origLoad = loader.load.bind(loader);
+                loader.load = function(context, loadConfig, callbacks) {
+                    // 清除请求头中的 Referer
+                    if (loadConfig) {
+                        loadConfig.headers = {};
+                    }
+                    origLoad(context, loadConfig, callbacks);
+                };
+                return loader;
+            }
+            return CustomLoader;
+        }
+        
         hls = new Hls({
             debug: false,
-            enableWorker: true
+            enableWorker: true,
+            loader: createNoRefererLoader()
         });
         
         hls.loadSource(url);
@@ -224,9 +242,10 @@ function playVideo(url) {
             if (data.fatal) {
                 switch (data.type) {
                     case Hls.ErrorTypes.NETWORK_ERROR:
-                        console.error('Network error encountered');
-                        hls.startLoad();
-                        updateStatus('error', '网络错误，尝试重连...');
+                        console.error('Network error encountered', data);
+                        hls.destroy();
+                        showLoading(false);
+                        updateStatus('error', '网络错误，服务器拒绝了请求');
                         break;
                     case Hls.ErrorTypes.MEDIA_ERROR:
                         console.error('Media error encountered');
@@ -242,7 +261,6 @@ function playVideo(url) {
             }
         });
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
         video.src = url;
         video.addEventListener('loadedmetadata', function() {
             playerMessage.style.display = 'none';
