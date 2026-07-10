@@ -285,8 +285,7 @@ function playVideo(url) {
         
         hls = new Hls({
             debug: false,
-            enableWorker: false,
-            loader: createNoRefererLoader()
+            enableWorker: true,
         });
         
         hls.loadSource(url);
