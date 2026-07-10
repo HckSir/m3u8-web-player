@@ -200,19 +200,85 @@ function playVideo(url) {
         showLoading(true);
         updateStatus('loading', '正在加载视频资源...');
         
-        // 自定义 loader：移除 ts 和 key 请求的 Referer 头
+        // 自定义 loader：使用 fetch + no-referrer 策略，绕过服务器 Referer 校验
         function createNoRefererLoader() {
             function CustomLoader(config) {
-                var loader = new Hls.DefaultConfig.loader(config);
-                var origLoad = loader.load.bind(loader);
-                loader.load = function(context, loadConfig, callbacks) {
-                    // 清除请求头中的 Referer
-                    if (loadConfig) {
-                        loadConfig.headers = {};
+                var loadUrl = null;
+                var aborter = null;
+                
+                function destroy() {
+                    if (aborter) {
+                        aborter.abort();
+                        aborter = null;
                     }
-                    origLoad(context, loadConfig, callbacks);
+                }
+                
+                function abort() {
+                    destroy();
+                }
+                
+                return {
+                    destroy: destroy,
+                    abort: abort,
+                    load: function(context, loadConfig, callbacks) {
+                        loadUrl = context.url;
+                        aborter = new AbortController();
+                        
+                        var fetchOptions = {
+                            method: 'GET',
+                            mode: 'cors',
+                            credentials: 'omit',
+                            referrerPolicy: 'no-referrer',
+                            signal: aborter.signal,
+                            headers: {}
+                        };
+                        
+                        fetch(loadUrl, fetchOptions)
+                            .then(function(response) {
+                                if (!response.ok) {
+                                    throw new Error('HTTP ' + response.status);
+                                }
+                                var total = parseInt(response.headers.get('Content-Length') || '0');
+                                if (callbacks.onprogress) {
+                                    callbacks.onprogress(null, {total: total, loaded: 0}, context, null);
+                                }
+                                return response.arrayBuffer();
+                            })
+                            .then(function(buffer) {
+                                var stats = {
+                                    total: buffer.byteLength,
+                                    loaded: buffer.byteLength,
+                                    aborted: false
+                                };
+                                if (callbacks.onprogress) {
+                                    callbacks.onprogress(null, stats, context, null);
+                                }
+                                if (callbacks.onSuccess) {
+                                    callbacks.onSuccess(
+                                        {url: loadUrl, data: buffer},
+                                        stats,
+                                        context,
+                                        null
+                                    );
+                                }
+                            })
+                            .catch(function(err) {
+                                if (err.name === 'AbortError') return;
+                                var stats = {total: 0, loaded: 0, aborted: false};
+                                if (callbacks.onError) {
+                                    callbacks.onError(
+                                        {code: 0, text: err.message || 'Network error'},
+                                        stats,
+                                        context,
+                                        null
+                                    );
+                                }
+                            });
+                    },
+                    get stats() {
+                        return {total: 0, loaded: 0, aborted: false};
+                    }
                 };
-                return loader;
             }
             return CustomLoader;
         }
